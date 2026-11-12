@@ -904,12 +904,19 @@ function App() {
         } catch (err: any) {
           if (!pendingSavesRef.current[fileId])
             pendingSavesRef.current[fileId] = task;
+          const isVersionConflict = err?.response?.data?.conflict === true;
           setErrorMessage(
-            err?.response?.data?.error ||
-              err?.message ||
-              'Save failed. Your latest edit is still in this workspace; retry with Ctrl/Cmd+S.'
+            isVersionConflict
+              ? 'A teammate saved a newer version of this file. Your local edits are still in this editor but have not been saved. Copy your changes before reloading or manually combining versions.'
+              : err?.response?.data?.error ||
+                  err?.message ||
+                  'Save failed. Your latest edit is still in this workspace; retry with Ctrl/Cmd+S.'
           );
-          setNotice('Save failed · press Ctrl/Cmd+S to retry');
+          setNotice(
+            isVersionConflict
+              ? 'Edit conflict · local changes preserved'
+              : 'Save failed · press Ctrl/Cmd+S to retry'
+          );
           return false;
         }
       }
