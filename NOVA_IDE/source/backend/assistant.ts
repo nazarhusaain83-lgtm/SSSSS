@@ -319,8 +319,9 @@ export const assistantRoutes = {
         const current = byId.get(change.fileId)!;
         return {
           ...current,
+          id: change.fileId,
           content: change.content,
-          updatedAt: Math.max(Date.now(), current.updatedAt + 1),
+          updatedAt: Math.max(Date.now(), (current.updatedAt ?? 0) + 1),
         };
       });
       const updates = nextFiles.map(file => ({
