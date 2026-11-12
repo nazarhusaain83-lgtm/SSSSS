@@ -310,21 +310,10 @@ async function createProjectScaffold(
   try {
     const [project] = await db.get<{ name: string }>('projects', [projectId]);
     if (!project) throw new Error('Project not found.');
-    const [folderPage, filePage] = await Promise.all([
-      db.list<{ projectId: string; parentId: string | null; name: string }>(
-        'project_folders',
-        { limit: 500 }
-      ),
-      db.list<{
-        projectId: string;
-        parentId?: string | null;
-        name: string;
-        content: string;
-      }>('project_files', { limit: 500 }),
+    const [existingFolders, existingFiles] = await Promise.all([
+      listAll<{ projectId: string; parentId: string | null; name: string }>('project_folders', { projectId }),
+      listAll<{ projectId: string; parentId?: string | null; name: string; content: string }>('project_files', { projectId }),
     ]);
-    const existingFolders = folderPage.items.filter(
-      item => item.projectId === projectId
-    );
     const existingFiles = filePage.items.filter(
       item => item.projectId === projectId
     );
@@ -682,13 +671,10 @@ export const teamRoutes = {
       if (!isOwner)
         return error('Only the project owner can publish a team plan.', 403);
       const profiles = await projectProfiles(params.id);
-      const { items: memberRows } = await db.list<Membership>(
-        'project_members',
-        { limit: 500 }
-      );
-      const members = memberRows
-        .filter(item => item.projectId === params.id)
-        .slice(0, 3);
+      const memberRows = await listAll<Membership>('project_members', {
+        projectId: params.id,
+      });
+      const members = memberRows.slice(0, 3);
       if (members.length < 2)
         return error(
           'Invite at least one teammate before generating a team plan.',
@@ -705,12 +691,11 @@ export const teamRoutes = {
           'Every teammate must save a skill profile before Nova can assign roles.',
           400
         );
-      const { items: allFiles } = await db.list<{
+      const files = await listAll<{
         projectId: string;
         name: string;
         content: string;
-      }>('project_files', { limit: 500 });
-      const files = allFiles.filter(file => file.projectId === params.id);
+      }>('project_files', { projectId: params.id });
       const signals = projectSignals(files, project?.name || '');
       const candidates = ROLE_LANES.map(lane => ({
         lane,
