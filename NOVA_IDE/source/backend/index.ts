@@ -1,4 +1,4 @@
-import { db, router, json, error } from '@appdeploy/sdk';
+import { db, router, json, error, isAppDatabaseError } from '@appdeploy/sdk';
 import { requireSession, authRoutes } from './auth';
 import { listAll } from './data';
 import { workspaceRoutes } from './workspace';
@@ -556,17 +556,28 @@ export const handler = router({
       // comparison alone is not safe: two collaborators can both pass the read check.
       // Advance updatedAt monotonically so even same-millisecond saves get distinct versions.
       const updatedAt = Math.max(Date.now(), existing.updatedAt + 1);
-      const [updated] = await db.tx.update(
-        'project_files',
-        [
-          {
-            id: params.fileId,
-            record: { content: input.content, updatedAt },
-            if: { updatedAt: existing.updatedAt },
-          },
-        ],
-        { patch: true }
-      );
+      let updated = false;
+      try {
+        [updated] = await db.tx.update(
+          'project_files',
+          [
+            {
+              id: params.fileId,
+              record: { content: input.content, updatedAt },
+              if: { updatedAt: existing.updatedAt },
+            },
+          ],
+          { patch: true }
+        );
+      } catch (err) {
+        if (
+          !isAppDatabaseError(err) ||
+          (err.code !== 'AppDatabaseConflict' &&
+            err.code !== 'AppDatabaseConditionFailed')
+        ) {
+          throw err;
+        }
+      }
       if (!updated) {
         const [latest] = await db.get<FileRecord>(
           'project_files',
