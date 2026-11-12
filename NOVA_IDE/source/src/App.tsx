@@ -590,6 +590,10 @@ function App() {
         }
       }
       if (data?.action === 'file-deleted' && data.fileId) {
+        delete fileDraftsRef.current[data.fileId];
+        delete fileVersionsRef.current[data.fileId];
+        delete pendingSavesRef.current[data.fileId];
+        setFileConflict(data.fileId, null);
         setFiles(current => current.filter(item => item.id !== data.fileId));
         setOpenTabIds(current => current.filter(id => id !== data.fileId));
         setSelectedFile(current =>
@@ -1023,6 +1027,8 @@ function App() {
     setFiles([]);
     fileDraftsRef.current = {};
     fileVersionsRef.current = {};
+    conflictFilesRef.current = {};
+    setConflictFiles({});
     setFolders([]);
     setExpandedFolders(new Set());
     setOpenTabIds([]);
@@ -1715,7 +1721,9 @@ function App() {
         '/api/projects/' + activeProject.id + '/files/' + file.id
       );
       delete fileDraftsRef.current[file.id];
+      delete fileVersionsRef.current[file.id];
       delete pendingSavesRef.current[file.id];
+      setFileConflict(file.id, null);
       setDirtyFileIds(current => {
         const next = new Set(current);
         next.delete(file.id);
