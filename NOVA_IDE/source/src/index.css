@@ -1886,10 +1886,16 @@ select:focus-visible,
     width: 100%;
     max-width: 100vw;
   }
-  .members-overlay {
+  .members-panel {
+    position: absolute;
+    z-index: 45;
     top: 0;
+    right: 0;
     bottom: 0;
-    width: min(100vw - 42px, 380px);
+    width: min(360px, calc(100vw - 42px));
+    max-width: calc(100vw - 42px);
+    overflow-y: auto;
+    box-shadow: -12px 0 28px rgba(0,0,0,.35);
   }
   .nova-menu-bar {
     overflow-x: auto;
@@ -1899,8 +1905,8 @@ select:focus-visible,
   }
   .nova-command-center { display: none; }
   .dashboard-content { padding: 24px 16px; }
-  .dashboard-topbar { padding-inline: 12px; }
-  .dashboard-user { gap: 5px; }
+  .dashboard-shell { min-height: 100dvh; }
+  .dashboard-content { width: 100%; min-width: 0; }
   .nova-confirm-dialog,
   .setup-modal-box {
     max-height: calc(100dvh - 32px);
@@ -1918,7 +1924,6 @@ select:focus-visible,
   .project-switch { max-width: 38vw; }
   .connection-pill { font-size: 10px; }
   .preview-toggle { padding-inline: 7px; font-size: 11px; }
-  .dashboard-topbar-right { gap: 4px; }
   .auth-card { padding-inline: 18px; }
   .nova-confirm-actions,
   .setup-modal-actions { flex-wrap: wrap; }
