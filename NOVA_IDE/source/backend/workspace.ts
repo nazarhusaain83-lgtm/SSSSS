@@ -86,9 +86,7 @@ export const workspaceRoutes = {
       if (!(await access(params.id, user!.userId)))
         return error('Project not found or access denied.', 404);
       return json({
-        folders: (await all<Folder>('project_folders')).filter(
-          x => x.projectId === params.id
-        ),
+        folders: await all<Folder>('project_folders', params.id),
       });
     },
   ],
@@ -146,9 +144,7 @@ export const workspaceRoutes = {
       );
       if (parentId === undefined)
         return error('Destination folder not found.', 404);
-      const folders = (await all<Folder>('project_folders')).filter(
-        x => x.projectId === params.id
-      );
+      const folders = await all<Folder>('project_folders', params.id);
       const descendants = new Set([params.folderId]);
       let changed = true;
       while (changed) {
@@ -285,8 +281,8 @@ export const workspaceRoutes = {
       if (!root || root.projectId !== params.id)
         return error('Folder not found.', 404);
       const [folders, files] = await Promise.all([
-        all<Folder>('project_folders'),
-        all<FileRecord>('project_files'),
+        all<Folder>('project_folders', params.id),
+        all<FileRecord>('project_files', params.id),
       ]);
       const ids = new Set([params.folderId]);
       let changed = true;
