@@ -3932,10 +3932,15 @@ function App() {
             )}
             <div className="editor-tab-spacer" />
             <span className="save-label" role="status" aria-live="polite">
-              {notice ||
-                (selectedFile && dirtyFileIds.has(selectedFile.id)
-                  ? 'Unsaved changes'
-                  : 'Ready')}
+              {selectedFile && dirtyFileIds.has(selectedFile.id)
+                ? savePromisesRef.current[selectedFile.id]
+                  ? 'Saving…'
+                  : saveTimersRef.current[selectedFile.id]
+                    ? 'Unsaved changes…'
+                    : notice.startsWith('Save failed')
+                      ? notice
+                      : 'Unsaved changes'
+                : notice || 'Ready'}
             </span>
           </div>
           {selectedFile ? (
