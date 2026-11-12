@@ -168,10 +168,9 @@ export const assistantRoutes = {
           usage,
         });
       } catch (err: any) {
-        return error(
-          err?.message || 'Nova Assistant is unavailable. Please retry.',
-          503
-        );
+        // Provider and SDK errors can contain upstream details or configuration data.
+        // Keep those details in server-side logs rather than returning them to clients.
+        return error('Nova Assistant is unavailable. Please retry.', 503);
       }
     },
   ],
@@ -270,9 +269,9 @@ export const assistantRoutes = {
           usage,
         });
       } catch (err: any) {
+        // Do not expose raw provider/SDK exception messages to authenticated clients.
         return error(
-          err?.message ||
-            'Could not prepare a safe change plan. Nothing was modified.',
+          'Could not prepare a safe change plan. Nothing was modified.',
           503
         );
       }

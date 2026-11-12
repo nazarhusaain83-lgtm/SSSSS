@@ -2,6 +2,7 @@ import { db, json, error } from '@appdeploy/sdk';
 import { generateWithFreeProviders } from './ai-provider';
 import { requireSession } from './auth';
 import { notifySubscribers } from './realtime-subscribers';
+import { listAll } from './data';
 
 type Membership = {
   id?: string;
@@ -139,25 +140,16 @@ function cleanTags(value: unknown): string[] {
   ).slice(0, 24);
 }
 async function membership(projectId: string, userId: string) {
-  const { items } = await db.list<Membership>('project_members', {
-    limit: 500,
-  });
-  return (
-    items.find(
-      item => item.projectId === projectId && item.userId === userId
-    ) || null
-  );
+  const matches = await listAll<Membership>('project_members', { projectId, userId });
+  return matches[0] || null;
 }
 async function projectProfiles(projectId: string) {
-  const { items } = await db.list<Profile>('team_profiles', { limit: 500 });
-  return items.filter(item => item.projectId === projectId);
+  return listAll<Profile>('team_profiles', { projectId });
 }
 async function projectAssignments(projectId: string) {
-  const { items } = await db.list<Assignment>('team_assignments', {
-    limit: 500,
-  });
-  return items.filter(item => item.projectId === projectId);
+  return listAll<Assignment>('team_assignments', { projectId });
 }
+
 function scoreLane(
   profile: Profile | undefined,
   lane: (typeof ROLE_LANES)[number]
@@ -318,24 +310,10 @@ async function createProjectScaffold(
   try {
     const [project] = await db.get<{ name: string }>('projects', [projectId]);
     if (!project) throw new Error('Project not found.');
-    const [folderPage, filePage] = await Promise.all([
-      db.list<{ projectId: string; parentId: string | null; name: string }>(
-        'project_folders',
-        { limit: 500 }
-      ),
-      db.list<{
-        projectId: string;
-        parentId?: string | null;
-        name: string;
-        content: string;
-      }>('project_files', { limit: 500 }),
+    const [existingFolders, existingFiles] = await Promise.all([
+      listAll<{ projectId: string; parentId: string | null; name: string }>('project_folders', { projectId }),
+      listAll<{ projectId: string; parentId?: string | null; name: string; content: string }>('project_files', { projectId }),
     ]);
-    const existingFolders = folderPage.items.filter(
-      item => item.projectId === projectId
-    );
-    const existingFiles = filePage.items.filter(
-      item => item.projectId === projectId
-    );
     const assignmentBrief = assignments.map(item => ({
       member: item.memberName,
       role: item.role,
@@ -690,13 +668,10 @@ export const teamRoutes = {
       if (!isOwner)
         return error('Only the project owner can publish a team plan.', 403);
       const profiles = await projectProfiles(params.id);
-      const { items: memberRows } = await db.list<Membership>(
-        'project_members',
-        { limit: 500 }
-      );
-      const members = memberRows
-        .filter(item => item.projectId === params.id)
-        .slice(0, 3);
+      const memberRows = await listAll<Membership>('project_members', {
+        projectId: params.id,
+      });
+      const members = memberRows.slice(0, 3);
       if (members.length < 2)
         return error(
           'Invite at least one teammate before generating a team plan.',
@@ -713,12 +688,11 @@ export const teamRoutes = {
           'Every teammate must save a skill profile before Nova can assign roles.',
           400
         );
-      const { items: allFiles } = await db.list<{
+      const files = await listAll<{
         projectId: string;
         name: string;
         content: string;
-      }>('project_files', { limit: 500 });
-      const files = allFiles.filter(file => file.projectId === params.id);
+      }>('project_files', { projectId: params.id });
       const signals = projectSignals(files, project?.name || '');
       const candidates = ROLE_LANES.map(lane => ({
         lane,
