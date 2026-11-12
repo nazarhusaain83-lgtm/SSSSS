@@ -2357,14 +2357,21 @@ function App() {
         level?: string;
         message?: unknown;
       } | null;
-      if (payload?.source !== 'nova-preview' || payload.type !== 'console') return;
+      if (
+        !payload ||
+        typeof payload !== 'object' ||
+        payload.source !== 'nova-preview' ||
+        payload.type !== 'console' ||
+        typeof payload.message !== 'string' ||
+        payload.message.length > 4000
+      ) return;
+
       const validLevels = ['log', 'info', 'warn', 'error', 'debug'];
-      const level = validLevels.includes(payload.level || '')
-        ? payload.level as PreviewConsoleEntry['level']
-        : 'log';
+      if (!validLevels.includes(payload.level || '')) return;
+      const level = payload.level as PreviewConsoleEntry['level'];
       setPreviewConsole(current => [
         ...current.slice(-199),
-        { level, message: String(payload.message ?? ''), timestamp: Date.now() },
+        { level, message: payload.message!, timestamp: Date.now() },
       ]);
     };
     window.addEventListener('message', receivePreviewMessage);
