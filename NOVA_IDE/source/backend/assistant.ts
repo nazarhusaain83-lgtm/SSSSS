@@ -315,11 +315,21 @@ export const assistantRoutes = {
           );
         }
       }
-      const updatedAt = Date.now();
-      const updates = input.changes.map(change => ({
-        id: change.fileId,
-        record: { content: change.content, updatedAt },
-        if: { content: change.baseContent },
+      const nextFiles = input.changes.map(change => {
+        const current = byId.get(change.fileId)!;
+        return {
+          ...current,
+          content: change.content,
+          updatedAt: Math.max(Date.now(), current.updatedAt + 1),
+        };
+      });
+      const updates = nextFiles.map(file => ({
+        id: file.id,
+        record: { content: file.content, updatedAt: file.updatedAt },
+        if: {
+          content: byId.get(file.id)!.content,
+          updatedAt: byId.get(file.id)!.updatedAt,
+        },
       }));
       try {
         await db.transact([
@@ -338,11 +348,7 @@ export const assistantRoutes = {
         }
         throw err;
       }
-      const updatedFiles = input.changes.map(change => ({
-        ...byId.get(change.fileId),
-        content: change.content,
-        updatedAt,
-      }));
+      const updatedFiles = nextFiles;
       await Promise.all(
         updatedFiles.map(file =>
           notifySubscribers('project', projectId, {
