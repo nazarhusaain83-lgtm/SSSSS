@@ -462,6 +462,18 @@ function App() {
   const savePromisesRef = useRef<Record<string, Promise<boolean>>>({});
   const fileDraftsRef = useRef<Record<string, string>>({});
   const fileVersionsRef = useRef<Record<string, number>>({});
+  const [conflictFiles, setConflictFiles] = useState<Record<string, ProjectFile>>({});
+  const conflictFilesRef = useRef<Record<string, ProjectFile>>({});
+  const setFileConflict = (fileId: string, file: ProjectFile | null) => {
+    if (file) conflictFilesRef.current[fileId] = file;
+    else delete conflictFilesRef.current[fileId];
+    setConflictFiles(current => {
+      const next = { ...current };
+      if (file) next[fileId] = file;
+      else delete next[fileId];
+      return next;
+    });
+  };
   const activeProjectRef = useRef<Project | null>(null);
   const projectLoadRequestRef = useRef(0);
   const restoreAttemptedRef = useRef(false);
@@ -551,6 +563,8 @@ function App() {
         );
       }
       if (data?.action === 'file-created' && data.file) {
+        fileVersionsRef.current[data.file.id] = data.file.updatedAt;
+        fileDraftsRef.current[data.file.id] = data.file.content;
         setFiles(current =>
           current.some(item => item.id === data.file.id)
             ? current
@@ -576,6 +590,10 @@ function App() {
         }
       }
       if (data?.action === 'file-deleted' && data.fileId) {
+        delete fileDraftsRef.current[data.fileId];
+        delete fileVersionsRef.current[data.fileId];
+        delete pendingSavesRef.current[data.fileId];
+        setFileConflict(data.fileId, null);
         setFiles(current => current.filter(item => item.id !== data.fileId));
         setOpenTabIds(current => current.filter(id => id !== data.fileId));
         setSelectedFile(current =>
@@ -846,6 +864,7 @@ function App() {
   }, [user, projects, activeProject]);
 
   const flushFileSave = async (fileId: string): Promise<boolean> => {
+    if (conflictFilesRef.current[fileId]) return false;
     const timer = saveTimersRef.current[fileId];
     if (timer) {
       clearTimeout(timer);
@@ -854,7 +873,15 @@ function App() {
     const running = savePromisesRef.current[fileId];
     if (running) {
       const completed = await running;
-      if (!completed) return false;
+      if (!completed) {
+        if (
+          !conflictFilesRef.current[fileId] &&
+          pendingSavesRef.current[fileId]
+        ) {
+          return flushFileSave(fileId);
+        }
+        return false;
+      }
       return pendingSavesRef.current[fileId] ? flushFileSave(fileId) : true;
     }
     if (!pendingSavesRef.current[fileId]) return true;
@@ -905,6 +932,9 @@ function App() {
           if (!pendingSavesRef.current[fileId])
             pendingSavesRef.current[fileId] = task;
           const isVersionConflict = err?.response?.data?.conflict === true;
+          if (isVersionConflict && err?.response?.data?.file) {
+            setFileConflict(fileId, err.response.data.file as ProjectFile);
+          }
           setErrorMessage(
             isVersionConflict
               ? 'A teammate saved a newer version of this file. Your local edits are still in this editor but have not been saved. Copy your changes before reloading or manually combining versions.'
@@ -931,6 +961,41 @@ function App() {
     return completed;
   };
 
+  const reloadLatestFile = (fileId: string) => {
+    const latest = conflictFilesRef.current[fileId];
+    if (!latest) return;
+    const timer = saveTimersRef.current[fileId];
+    if (timer) clearTimeout(timer);
+    delete saveTimersRef.current[fileId];
+    delete pendingSavesRef.current[fileId];
+    delete fileDraftsRef.current[fileId];
+    fileVersionsRef.current[fileId] = latest.updatedAt;
+    fileDraftsRef.current[fileId] = latest.content;
+    setFiles(current => current.map(file => file.id === fileId ? latest : file));
+    setSelectedFile(current => current?.id === fileId ? latest : current);
+    setDirtyFileIds(current => {
+      const next = new Set(current);
+      next.delete(fileId);
+      return next;
+    });
+    setFileConflict(fileId, null);
+    setErrorMessage('');
+    setNotice('Loaded latest teammate version');
+  };
+
+  const overwriteWithLocalFile = async (fileId: string) => {
+    const latest = conflictFilesRef.current[fileId];
+    if (!latest || !pendingSavesRef.current[fileId]) return;
+    fileVersionsRef.current[fileId] = latest.updatedAt;
+    setFileConflict(fileId, null);
+    setErrorMessage('');
+    setNotice('Saving your version over the teammate version…');
+    const saved = await flushFileSave(fileId);
+    if (!saved && !conflictFilesRef.current[fileId]) {
+      setNotice('Save failed · your local changes are still preserved');
+    }
+  };
+
   const leaveWorkspace = async (): Promise<boolean> => {
     const saveIds = Array.from(
       new Set([
@@ -944,8 +1009,11 @@ function App() {
       saveResults.some(result => !result) ||
       saveIds.some(id => pendingSavesRef.current[id])
     ) {
+      const hasConflict = Object.keys(conflictFilesRef.current).length > 0;
       setErrorMessage(
-        'A file could not be saved. Your workspace is still open; retry with Ctrl/Cmd+S before leaving.'
+        hasConflict
+          ? 'Resolve each file conflict before leaving. Your local edits are still preserved in this workspace.'
+          : 'A file could not be saved. Your workspace is still open; retry with Ctrl/Cmd+S before leaving.'
       );
       return false;
     }
@@ -959,6 +1027,8 @@ function App() {
     setFiles([]);
     fileDraftsRef.current = {};
     fileVersionsRef.current = {};
+    conflictFilesRef.current = {};
+    setConflictFiles({});
     setFolders([]);
     setExpandedFolders(new Set());
     setOpenTabIds([]);
@@ -1060,6 +1130,8 @@ function App() {
           parentId: currentFolderId,
         }
       );
+      fileVersionsRef.current[response.data.file.id] = response.data.file.updatedAt;
+      fileDraftsRef.current[response.data.file.id] = response.data.file.content;
       setFiles(current =>
         current.some(item => item.id === response.data.file.id)
           ? current
@@ -1154,6 +1226,8 @@ function App() {
         : await api.put('/api/projects/' + activeProject.id + '/folders/' + target.id, { name: nextName });
       if (target.type === 'file') {
         const renamed = response.data.file as ProjectFile;
+        fileVersionsRef.current[target.id] = renamed.updatedAt;
+        fileDraftsRef.current[target.id] = renamed.content;
         setFiles(current => current.map(item => item.id === target.id ? renamed : item));
         setSelectedFile(current => current?.id === target.id ? renamed : current);
       } else {
@@ -1406,6 +1480,9 @@ function App() {
       fileDraftsRef.current = Object.fromEntries(
         refreshedFiles.map((file: ProjectFile) => [file.id, file.content])
       );
+      fileVersionsRef.current = Object.fromEntries(
+        refreshedFiles.map((file: ProjectFile) => [file.id, file.updatedAt])
+      );
       setFolders(folderResponse.data.folders || []);
       setExpandedFolders(
         new Set(
@@ -1644,7 +1721,9 @@ function App() {
         '/api/projects/' + activeProject.id + '/files/' + file.id
       );
       delete fileDraftsRef.current[file.id];
+      delete fileVersionsRef.current[file.id];
       delete pendingSavesRef.current[file.id];
+      setFileConflict(file.id, null);
       setDirtyFileIds(current => {
         const next = new Set(current);
         next.delete(file.id);
@@ -2210,7 +2289,10 @@ function App() {
           );
           await api.put(
             '/api/projects/' + projectId + '/files/' + created.data.file.id,
-            { content }
+            {
+              content,
+              expectedUpdatedAt: created.data.file.updatedAt,
+            }
           );
           filePaths.add(fullPath);
           createdCount++;
@@ -2229,6 +2311,9 @@ function App() {
       setFiles(refreshedFiles);
       fileDraftsRef.current = Object.fromEntries(
         refreshedFiles.map(file => [file.id, file.content])
+      );
+      fileVersionsRef.current = Object.fromEntries(
+        refreshedFiles.map(file => [file.id, file.updatedAt])
       );
       setFolders(freshFolders.data.folders || []);
       setExpandedFolders(
@@ -3970,6 +4055,22 @@ function App() {
                 : notice || 'Ready'}
             </span>
           </div>
+          {selectedFile && conflictFiles[selectedFile.id] && (
+            <div className="conflict-banner" role="alert">
+              <div>
+                <strong>Another teammate saved this file.</strong>
+                <p>Your local edits are preserved but are not saved. Reload the latest version or deliberately overwrite it with your version.</p>
+              </div>
+              <div className="conflict-actions">
+                <button type="button" onClick={() => reloadLatestFile(selectedFile.id)}>
+                  Use latest version
+                </button>
+                <button type="button" onClick={() => void overwriteWithLocalFile(selectedFile.id)}>
+                  Overwrite with my version
+                </button>
+              </div>
+            </div>
+          )}
           {selectedFile ? (
             <div className="monaco-wrap">
               <Editor

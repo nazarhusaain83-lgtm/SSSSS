@@ -1,4 +1,4 @@
-import { db, json, error } from '@appdeploy/sdk';
+import { db, json, error, isAppDatabaseError } from '@appdeploy/sdk';
 import { requireSession } from './auth';
 import { notifySubscribers } from './realtime-subscribers';
 import { listAll } from './data';
@@ -347,7 +347,11 @@ export const workspaceRoutes = {
     async ({ params, body, user }: any) => {
       if (!(await access(params.id, user!.userId)))
         return error('Project not found or access denied.', 404);
-      const [old] = await db.get<FileRecord>('project_files', [params.fileId]);
+      const [old] = await db.get<FileRecord>(
+        'project_files',
+        [params.fileId],
+        { consistent: true }
+      );
       if (!old || old.projectId !== params.id)
         return error('File not found.', 404);
       const input = body || {};
@@ -366,17 +370,29 @@ export const workspaceRoutes = {
           'A file or folder with that name already exists here.',
           409
         );
-      const updatedAt = Date.now();
-      const [ok] = await db.tx.update(
-        'project_files',
-        [
-          {
-            id: params.fileId,
-            record: { name: cleanName, parentId, updatedAt },
-          },
-        ],
-        { patch: true }
-      );
+      const updatedAt = Math.max(Date.now(), old.updatedAt + 1);
+      let ok = false;
+      try {
+        [ok] = await db.tx.update(
+          'project_files',
+          [
+            {
+              id: params.fileId,
+              record: { name: cleanName, parentId, updatedAt },
+              if: { updatedAt: old.updatedAt },
+            },
+          ],
+          { patch: true }
+        );
+      } catch (err) {
+        if (
+          !isAppDatabaseError(err) ||
+          (err.code !== 'AppDatabaseConflict' &&
+            err.code !== 'AppDatabaseConditionFailed')
+        ) {
+          throw err;
+        }
+      }
       if (!ok)
         return error('File changed before update. Refresh and retry.', 409);
       const file = {
@@ -398,7 +414,11 @@ export const workspaceRoutes = {
     async ({ params, body, user }: any) => {
       if (!(await access(params.id, user!.userId)))
         return error('Project not found or access denied.', 404);
-      const [old] = await db.get<FileRecord>('project_files', [params.fileId]);
+      const [old] = await db.get<FileRecord>(
+        'project_files',
+        [params.fileId],
+        { consistent: true }
+      );
       if (!old || old.projectId !== params.id)
         return error('File not found.', 404);
       const input = body || {};
@@ -417,17 +437,29 @@ export const workspaceRoutes = {
           'A file or folder with that name already exists here.',
           409
         );
-      const updatedAt = Date.now();
-      const [ok] = await db.tx.update(
-        'project_files',
-        [
-          {
-            id: params.fileId,
-            record: { name: cleanName, parentId, updatedAt },
-          },
-        ],
-        { patch: true }
-      );
+      const updatedAt = Math.max(Date.now(), old.updatedAt + 1);
+      let ok = false;
+      try {
+        [ok] = await db.tx.update(
+          'project_files',
+          [
+            {
+              id: params.fileId,
+              record: { name: cleanName, parentId, updatedAt },
+              if: { updatedAt: old.updatedAt },
+            },
+          ],
+          { patch: true }
+        );
+      } catch (err) {
+        if (
+          !isAppDatabaseError(err) ||
+          (err.code !== 'AppDatabaseConflict' &&
+            err.code !== 'AppDatabaseConditionFailed')
+        ) {
+          throw err;
+        }
+      }
       if (!ok)
         return error('File changed before update. Refresh and retry.', 409);
       const file = {
