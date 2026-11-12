@@ -314,9 +314,6 @@ async function createProjectScaffold(
       listAll<{ projectId: string; parentId: string | null; name: string }>('project_folders', { projectId }),
       listAll<{ projectId: string; parentId?: string | null; name: string; content: string }>('project_files', { projectId }),
     ]);
-    const existingFiles = filePage.items.filter(
-      item => item.projectId === projectId
-    );
     const assignmentBrief = assignments.map(item => ({
       member: item.memberName,
       role: item.role,
