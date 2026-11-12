@@ -2,6 +2,7 @@ import { db, json, error } from '@appdeploy/sdk';
 import { generateWithFreeProviders } from './ai-provider';
 import { requireSession } from './auth';
 import { notifySubscribers } from './realtime-subscribers';
+import { listAll } from './data';
 
 type Membership = {
   id?: string;
@@ -139,25 +140,16 @@ function cleanTags(value: unknown): string[] {
   ).slice(0, 24);
 }
 async function membership(projectId: string, userId: string) {
-  const { items } = await db.list<Membership>('project_members', {
-    limit: 500,
-  });
-  return (
-    items.find(
-      item => item.projectId === projectId && item.userId === userId
-    ) || null
-  );
+  const matches = await listAll<Membership>('project_members', { projectId, userId });
+  return matches[0] || null;
 }
 async function projectProfiles(projectId: string) {
-  const { items } = await db.list<Profile>('team_profiles', { limit: 500 });
-  return items.filter(item => item.projectId === projectId);
+  return listAll<Profile>('team_profiles', { projectId });
 }
 async function projectAssignments(projectId: string) {
-  const { items } = await db.list<Assignment>('team_assignments', {
-    limit: 500,
-  });
-  return items.filter(item => item.projectId === projectId);
+  return listAll<Assignment>('team_assignments', { projectId });
 }
+
 function scoreLane(
   profile: Profile | undefined,
   lane: (typeof ROLE_LANES)[number]
