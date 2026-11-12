@@ -563,6 +563,8 @@ function App() {
         );
       }
       if (data?.action === 'file-created' && data.file) {
+        fileVersionsRef.current[data.file.id] = data.file.updatedAt;
+        fileDraftsRef.current[data.file.id] = data.file.content;
         setFiles(current =>
           current.some(item => item.id === data.file.id)
             ? current
@@ -1122,6 +1124,8 @@ function App() {
           parentId: currentFolderId,
         }
       );
+      fileVersionsRef.current[response.data.file.id] = response.data.file.updatedAt;
+      fileDraftsRef.current[response.data.file.id] = response.data.file.content;
       setFiles(current =>
         current.some(item => item.id === response.data.file.id)
           ? current
@@ -1216,6 +1220,8 @@ function App() {
         : await api.put('/api/projects/' + activeProject.id + '/folders/' + target.id, { name: nextName });
       if (target.type === 'file') {
         const renamed = response.data.file as ProjectFile;
+        fileVersionsRef.current[target.id] = renamed.updatedAt;
+        fileDraftsRef.current[target.id] = renamed.content;
         setFiles(current => current.map(item => item.id === target.id ? renamed : item));
         setSelectedFile(current => current?.id === target.id ? renamed : current);
       } else {
@@ -2272,7 +2278,10 @@ function App() {
           );
           await api.put(
             '/api/projects/' + projectId + '/files/' + created.data.file.id,
-            { content }
+            {
+              content,
+              expectedUpdatedAt: created.data.file.updatedAt,
+            }
           );
           filePaths.add(fullPath);
           createdCount++;
