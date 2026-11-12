@@ -1474,6 +1474,9 @@ function App() {
       fileDraftsRef.current = Object.fromEntries(
         refreshedFiles.map((file: ProjectFile) => [file.id, file.content])
       );
+      fileVersionsRef.current = Object.fromEntries(
+        refreshedFiles.map((file: ProjectFile) => [file.id, file.updatedAt])
+      );
       setFolders(folderResponse.data.folders || []);
       setExpandedFolders(
         new Set(
@@ -2300,6 +2303,9 @@ function App() {
       setFiles(refreshedFiles);
       fileDraftsRef.current = Object.fromEntries(
         refreshedFiles.map(file => [file.id, file.content])
+      );
+      fileVersionsRef.current = Object.fromEntries(
+        refreshedFiles.map(file => [file.id, file.updatedAt])
       );
       setFolders(freshFolders.data.folders || []);
       setExpandedFolders(
