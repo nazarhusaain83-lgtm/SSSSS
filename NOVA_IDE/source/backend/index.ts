@@ -602,10 +602,19 @@ export const handler = router({
   'POST /api/projects/:id/unsubscribe': [
     requireSession,
     async ({ params, body, user }) => {
+      const access = await requireProjectMember(params.id, user!.userId);
+      if (!access)
+        return error('Project not found or you do not have access.', 404);
+
       const input = (body || {}) as { connection_id?: string };
-      if (input.connection_id) {
-        await removeSubscriptions('project', params.id, input.connection_id);
+      if (
+        typeof input.connection_id !== 'string' ||
+        !input.connection_id.trim()
+      ) {
+        return error('A live connection is required.', 400);
       }
+
+      await removeSubscriptions('project', params.id, input.connection_id);
       return json({ ok: true });
     },
   ],
