@@ -347,7 +347,11 @@ export const workspaceRoutes = {
     async ({ params, body, user }: any) => {
       if (!(await access(params.id, user!.userId)))
         return error('Project not found or access denied.', 404);
-      const [old] = await db.get<FileRecord>('project_files', [params.fileId]);
+      const [old] = await db.get<FileRecord>(
+        'project_files',
+        [params.fileId],
+        { consistent: true }
+      );
       if (!old || old.projectId !== params.id)
         return error('File not found.', 404);
       const input = body || {};
@@ -366,13 +370,14 @@ export const workspaceRoutes = {
           'A file or folder with that name already exists here.',
           409
         );
-      const updatedAt = Date.now();
+      const updatedAt = Math.max(Date.now(), old.updatedAt + 1);
       const [ok] = await db.tx.update(
         'project_files',
         [
           {
             id: params.fileId,
             record: { name: cleanName, parentId, updatedAt },
+            if: { updatedAt: old.updatedAt },
           },
         ],
         { patch: true }
@@ -398,7 +403,11 @@ export const workspaceRoutes = {
     async ({ params, body, user }: any) => {
       if (!(await access(params.id, user!.userId)))
         return error('Project not found or access denied.', 404);
-      const [old] = await db.get<FileRecord>('project_files', [params.fileId]);
+      const [old] = await db.get<FileRecord>(
+        'project_files',
+        [params.fileId],
+        { consistent: true }
+      );
       if (!old || old.projectId !== params.id)
         return error('File not found.', 404);
       const input = body || {};
@@ -417,13 +426,14 @@ export const workspaceRoutes = {
           'A file or folder with that name already exists here.',
           409
         );
-      const updatedAt = Date.now();
+      const updatedAt = Math.max(Date.now(), old.updatedAt + 1);
       const [ok] = await db.tx.update(
         'project_files',
         [
           {
             id: params.fileId,
             record: { name: cleanName, parentId, updatedAt },
+            if: { updatedAt: old.updatedAt },
           },
         ],
         { patch: true }
