@@ -520,6 +520,7 @@ export const handler = router({
       const input = (body || {}) as {
         content?: string;
         connection_id?: string;
+        expectedUpdatedAt?: number;
       };
       if (typeof input.content !== 'string' || input.content.length > 100000) {
         return error(
@@ -527,11 +528,27 @@ export const handler = router({
           400
         );
       }
+      if (
+        typeof input.expectedUpdatedAt !== 'number' ||
+        !Number.isFinite(input.expectedUpdatedAt)
+      ) {
+        return error('A file version is required to save changes. Refresh and retry.', 400);
+      }
       const [existing] = await db.get<FileRecord>('project_files', [
         params.fileId,
       ]);
       if (!existing || existing.projectId !== params.id)
         return error('File not found.', 404);
+      if (existing.updatedAt !== input.expectedUpdatedAt) {
+        return json(
+          {
+            error: 'This file was updated by another teammate. Review the latest version before saving.',
+            conflict: true,
+            file: { ...existing, id: params.fileId },
+          },
+          409
+        );
+      }
       const updatedAt = Date.now();
       const [updated] = await db.tx.update(
         'project_files',
