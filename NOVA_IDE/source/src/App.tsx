@@ -461,6 +461,7 @@ function App() {
   >({});
   const savePromisesRef = useRef<Record<string, Promise<boolean>>>({});
   const fileDraftsRef = useRef<Record<string, string>>({});
+  const fileVersionsRef = useRef<Record<string, number>>({});
   const activeProjectRef = useRef<Project | null>(null);
   const projectLoadRequestRef = useRef(0);
   const restoreAttemptedRef = useRef(false);
@@ -557,12 +558,22 @@ function App() {
         );
       }
       if (data?.action === 'file-updated' && data.file) {
-        setFiles(current =>
-          current.map(item => (item.id === data.file.id ? data.file : item))
-        );
-        setSelectedFile(current =>
-          current?.id === data.file.id ? data.file : current
-        );
+        const hasLocalEdits =
+          Boolean(pendingSavesRef.current[data.file.id]) ||
+          Boolean(savePromisesRef.current[data.file.id]) ||
+          Boolean(saveTimersRef.current[data.file.id]);
+        if (hasLocalEdits) {
+          setNotice('Teammate updated this file · save will be checked for conflicts');
+        } else {
+          fileVersionsRef.current[data.file.id] = data.file.updatedAt;
+          fileDraftsRef.current[data.file.id] = data.file.content;
+          setFiles(current =>
+            current.map(item => (item.id === data.file.id ? data.file : item))
+          );
+          setSelectedFile(current =>
+            current?.id === data.file.id ? data.file : current
+          );
+        }
       }
       if (data?.action === 'file-deleted' && data.fileId) {
         setFiles(current => current.filter(item => item.id !== data.fileId));
@@ -625,6 +636,9 @@ function App() {
                   file.id,
                   file.content,
                 ])
+              );
+              fileVersionsRef.current = Object.fromEntries(
+                refreshedFiles.map((file: ProjectFile) => [file.id, file.updatedAt])
               );
               setFolders(folderResponse.data.folders || []);
               setExpandedFolders(
@@ -757,6 +771,9 @@ function App() {
       fileDraftsRef.current = Object.fromEntries(
         loadedFiles.map((file: ProjectFile) => [file.id, file.content])
       );
+      fileVersionsRef.current = Object.fromEntries(
+        loadedFiles.map((file: ProjectFile) => [file.id, file.updatedAt])
+      );
       setFolders(folderResponse.data.folders || []);
       setExpandedFolders(new Set());
       setCurrentFolderId(null);
@@ -850,10 +867,12 @@ function App() {
             '/api/projects/' + task.projectId + '/files/' + fileId,
             {
               content: task.content,
+              expectedUpdatedAt: fileVersionsRef.current[fileId],
               connection_id: connRef.current?.connectionId || undefined,
             }
           );
           const savedFile = response.data.file as ProjectFile;
+          fileVersionsRef.current[fileId] = savedFile.updatedAt;
           const latestDraft = fileDraftsRef.current[fileId];
           const isCurrentProject =
             activeProjectRef.current?.id === task.projectId;
@@ -932,6 +951,7 @@ function App() {
     setActiveProject(null);
     setFiles([]);
     fileDraftsRef.current = {};
+    fileVersionsRef.current = {};
     setFolders([]);
     setExpandedFolders(new Set());
     setOpenTabIds([]);
