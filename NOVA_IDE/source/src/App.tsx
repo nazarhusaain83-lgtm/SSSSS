@@ -867,7 +867,15 @@ function App() {
     const running = savePromisesRef.current[fileId];
     if (running) {
       const completed = await running;
-      if (!completed) return false;
+      if (!completed) {
+        if (
+          !conflictFilesRef.current[fileId] &&
+          pendingSavesRef.current[fileId]
+        ) {
+          return flushFileSave(fileId);
+        }
+        return false;
+      }
       return pendingSavesRef.current[fileId] ? flushFileSave(fileId) : true;
     }
     if (!pendingSavesRef.current[fileId]) return true;
@@ -995,8 +1003,11 @@ function App() {
       saveResults.some(result => !result) ||
       saveIds.some(id => pendingSavesRef.current[id])
     ) {
+      const hasConflict = Object.keys(conflictFilesRef.current).length > 0;
       setErrorMessage(
-        'A file could not be saved. Your workspace is still open; retry with Ctrl/Cmd+S before leaving.'
+        hasConflict
+          ? 'Resolve each file conflict before leaving. Your local edits are still preserved in this workspace.'
+          : 'A file could not be saved. Your workspace is still open; retry with Ctrl/Cmd+S before leaving.'
       );
       return false;
     }
