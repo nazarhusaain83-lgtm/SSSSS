@@ -462,6 +462,18 @@ function App() {
   const savePromisesRef = useRef<Record<string, Promise<boolean>>>({});
   const fileDraftsRef = useRef<Record<string, string>>({});
   const fileVersionsRef = useRef<Record<string, number>>({});
+  const [conflictFiles, setConflictFiles] = useState<Record<string, ProjectFile>>({});
+  const conflictFilesRef = useRef<Record<string, ProjectFile>>({});
+  const setFileConflict = (fileId: string, file: ProjectFile | null) => {
+    if (file) conflictFilesRef.current[fileId] = file;
+    else delete conflictFilesRef.current[fileId];
+    setConflictFiles(current => {
+      const next = { ...current };
+      if (file) next[fileId] = file;
+      else delete next[fileId];
+      return next;
+    });
+  };
   const activeProjectRef = useRef<Project | null>(null);
   const projectLoadRequestRef = useRef(0);
   const restoreAttemptedRef = useRef(false);
@@ -846,6 +858,7 @@ function App() {
   }, [user, projects, activeProject]);
 
   const flushFileSave = async (fileId: string): Promise<boolean> => {
+    if (conflictFilesRef.current[fileId]) return false;
     const timer = saveTimersRef.current[fileId];
     if (timer) {
       clearTimeout(timer);
@@ -905,6 +918,9 @@ function App() {
           if (!pendingSavesRef.current[fileId])
             pendingSavesRef.current[fileId] = task;
           const isVersionConflict = err?.response?.data?.conflict === true;
+          if (isVersionConflict && err?.response?.data?.file) {
+            setFileConflict(fileId, err.response.data.file as ProjectFile);
+          }
           setErrorMessage(
             isVersionConflict
               ? 'A teammate saved a newer version of this file. Your local edits are still in this editor but have not been saved. Copy your changes before reloading or manually combining versions.'
@@ -929,6 +945,41 @@ function App() {
     if (completed && pendingSavesRef.current[fileId])
       return flushFileSave(fileId);
     return completed;
+  };
+
+  const reloadLatestFile = (fileId: string) => {
+    const latest = conflictFilesRef.current[fileId];
+    if (!latest) return;
+    const timer = saveTimersRef.current[fileId];
+    if (timer) clearTimeout(timer);
+    delete saveTimersRef.current[fileId];
+    delete pendingSavesRef.current[fileId];
+    delete fileDraftsRef.current[fileId];
+    fileVersionsRef.current[fileId] = latest.updatedAt;
+    fileDraftsRef.current[fileId] = latest.content;
+    setFiles(current => current.map(file => file.id === fileId ? latest : file));
+    setSelectedFile(current => current?.id === fileId ? latest : current);
+    setDirtyFileIds(current => {
+      const next = new Set(current);
+      next.delete(fileId);
+      return next;
+    });
+    setFileConflict(fileId, null);
+    setErrorMessage('');
+    setNotice('Loaded latest teammate version');
+  };
+
+  const overwriteWithLocalFile = async (fileId: string) => {
+    const latest = conflictFilesRef.current[fileId];
+    if (!latest || !pendingSavesRef.current[fileId]) return;
+    fileVersionsRef.current[fileId] = latest.updatedAt;
+    setFileConflict(fileId, null);
+    setErrorMessage('');
+    setNotice('Saving your version over the teammate version…');
+    const saved = await flushFileSave(fileId);
+    if (!saved && !conflictFilesRef.current[fileId]) {
+      setNotice('Save failed · your local changes are still preserved');
+    }
   };
 
   const leaveWorkspace = async (): Promise<boolean> => {
@@ -3970,6 +4021,22 @@ function App() {
                 : notice || 'Ready'}
             </span>
           </div>
+          {selectedFile && conflictFiles[selectedFile.id] && (
+            <div className="conflict-banner" role="alert">
+              <div>
+                <strong>Another teammate saved this file.</strong>
+                <p>Your local edits are preserved but are not saved. Reload the latest version or deliberately overwrite it with your version.</p>
+              </div>
+              <div className="conflict-actions">
+                <button type="button" onClick={() => reloadLatestFile(selectedFile.id)}>
+                  Use latest version
+                </button>
+                <button type="button" onClick={() => void overwriteWithLocalFile(selectedFile.id)}>
+                  Overwrite with my version
+                </button>
+              </div>
+            </div>
+          )}
           {selectedFile ? (
             <div className="monaco-wrap">
               <Editor
