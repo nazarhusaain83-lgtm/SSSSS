@@ -1892,3 +1892,42 @@ select:focus-visible,
     transition-duration: 0.01ms !important;
   }
 }
+
+
+/* Collaborative editor conflict controls */
+.conflict-banner {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 12px 16px;
+  border-bottom: 1px solid rgba(245, 158, 11, .35);
+  background: rgba(120, 75, 15, .18);
+  color: var(--text-primary, #f1f1f8);
+  flex-wrap: wrap;
+}
+.conflict-banner strong { display: block; font-size: 13px; }
+.conflict-banner p {
+  margin: 4px 0 0;
+  color: var(--text-secondary, #b7b7c5);
+  font-size: 12px;
+  line-height: 1.5;
+}
+.conflict-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.conflict-actions button {
+  border: 1px solid rgba(245, 158, 11, .5);
+  border-radius: 7px;
+  padding: 7px 10px;
+  background: rgba(245, 158, 11, .12);
+  color: inherit;
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+.conflict-actions button:hover { background: rgba(245, 158, 11, .22); }
+.conflict-actions button:focus-visible { outline: 2px solid #fbbf24; outline-offset: 2px; }
+@media (max-width: 600px) {
+  .conflict-banner { padding: 10px; }
+  .conflict-actions { width: 100%; }
+  .conflict-actions button { flex: 1 1 140px; }
+}
